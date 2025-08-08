@@ -63,8 +63,8 @@ This guide will focus on Option 2
 
 ### Well Done!
 - You have now setup an ascii animation.
-- If you wish to have just a static ascii image then just set `const frames = ;` to `1` and use a normal image.<img width="784" height="831" alt="Screenshot 2025-08-08 at 07 45 01" src="https://github.com/user-attachments/assets/efa331dc-7ad8-47a5-b082-0295862f3b73" />
-
+- If you wish to have just a static ascii image then just set `const frames = ;` to `1` and use a normal image.
+  
 > [!NOTE]
 > The ascii image quality is dependant on source image quality. To resize you can put the pre tag in a div/container.
 
