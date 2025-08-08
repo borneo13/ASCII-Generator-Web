@@ -66,4 +66,10 @@ This guide will focus on Option 2
 > [!NOTE]
 > The ascii image quality is dependant on source image quality. To resize you can put the pre tag in a div/container.
 
+## Option 1 Showcase 
+<img width="3588" height="1904" alt="image" src="https://github.com/user-attachments/assets/8d26f0c7-dffc-4538-9b1e-e417af8efd2a" />
+<br>
+<img width="1573" height="921" alt="image" src="https://github.com/user-attachments/assets/067f12d6-64c5-42f2-bc04-8eaa51450ab9" />
+
+
       
