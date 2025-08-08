@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- 
+
+MIT License
+
+Copyright (c) 2025 nyeku
+Copyright (c) 2025 nyekuuu
+Created by nyeku https://github.com/nyekuuu
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. 
+
+-->
+
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="A multipurpose image to ascii converter & animator.">
+<meta name="keywords" content="ASCII, Art, Image, Conversion, Animation">
+<meta name="author" content="nyeku">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>nyeku | ASCII Sprite Viewer</title>
+<style>
+  body { background: black; color: white; font-family: monospace; padding: 1em; }
+  pre { white-space: pre; font-family: monospace; line-height: 0.6; letter-spacing: 0px; font-size: 7px; margin-top: 1em; }
+  #controls { display: flex; flex-wrap: wrap; gap: 0.5em; margin-bottom: 1em; align-items: center; }
+  input[type="range"] { width: 150px; }
+  label { display: flex; align-items: center; gap: 0.5em; }
+  #dropzone { border: 2px dashed #777; padding: 1em; text-align: center; margin-top: 1em; color: #ccc; background: #111; font-size: 14px; border-radius: 6px; line-height: 1.5em; }
+  #dropzone strong { color: #fff; font-size: 16px; }
+  #dropzone b { color: #ffcc00; }
+  #scaleWarning { display: none; color: #ff4444; font-weight: bold; font-size: 13px; margin-left: 0.5em; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0.5; } }
+  #progressContainer { display: none; margin-top: 0.5em; }
+  #progressBar { width: 100%; height: 10px; background: #333; border-radius: 5px; overflow: hidden; }
+  #progressFill { height: 100%; width: 0%; background: #ffcc00; transition: width 0.2s; }
+  #progressText { font-size: 12px; color: #ffcc00; margin-top: 4px; }
+  #zoom { transition: transform 0.3s ease; transform-origin: top center; }
+  a:link { color: green; background-color: transparent; text-decoration: none; }
+  a:visited { color: pink; background-color: transparent; text-decoration: none; }
+  .sticky-footer {position: fixed; left: 0; top: 0; width: 100%; background-color: black; color: white; text-align: center; padding-top: 5px; padding-bottom: 5px;}
+  .pp { font-size: 900px; }
+  button { background-color: black; color: white; border: 2px solid pink; }
+  button:hover { background-color: white; color: black; border: 2px solid pink; cursor:pointer;}
+
+  .responsive-pp { font-size: 12px; padding-bottom: 2px; }
+
+  @media (max-width: 600px) {
+  button { background-color: black; color: white; border: 2px solid pink; font-size:10px;}
+  label {font-size:10px; line-height:1px; padding-bottom:2px;}
+  .responsive-pp { font-size: 7px; padding-bottom: 5px; }
+  #dropzone { font-size: 12px; }
+  .sticky-footer { position: fixed; left: 0; top: 0; width: 100%; font-size: 8px; background-color: black; color: white; text-align: center;  padding-bottom: 5px;}
+  }
+  
+  </style>
+</head>
+<body>
+    
+  <center>
+  <div id="pp">
+  <p class="responsive-pp"> media.nyeku.xyz/ascii</p>
+  </div>
+  </center>
+  
+<div id="controls" style="padding-left:7%;">
+  <input type="file" id="upload" accept="image/*">
+  
+  <label>
+    FPS: <span id="fpsValue">10</span>
+    <input type="range" id="fps" min="5" max="60" value="10">
+  </label>
+  
+  <label>
+    Scale: <span id="scaleValue">1.0</span>
+    <input type="range" id="scale" min="0.5" max="6" step="0.1" value="1">
+    <span id="scaleWarning">⚠ High scale may slow performance</span>
+  </label>
+  
+    <div>
+    <button onclick="zoomIn()">Zoom In</button>
+    <button onclick="zoomOut()">Zoom Out</button>
+    <button onclick="resetZoom()">Reset</button>
+    </div>
+  
+  <label>
+    Grayscale:
+    <input type="checkbox" id="grayscale"> <p>|</p>
+  </label>
+  
+  <label>
+    Static Image Mode:
+    <input type="checkbox" id="staticMode"> <p>|</p>
+  </label>
+  
+  <label>
+    Layout:
+    <select id="layout">
+      <option value="horizontal">Horizontal</option>
+      <option value="vertical">Vertical</option>
+    </select>
+  </label>
+  
+  <button id="download">Download Frames</button>
+  
+</div>
+
+
+<center>
+  <div id="zoom" style="background-color:black;padding-bottom:10px;">
+<pre id="ascii">Upload a file to begin...</pre>
+  </div>
+
+<div id="progressContainer">
+  <div id="progressBar"><div id="progressFill"></div></div>
+  <div id="progressText"></div>
+</div>
+</center>
+
+
+  <script>
+    let zoomLevel = 1;
+
+    function zoomIn() {
+      zoomLevel += 0.5;
+      document.getElementById("zoom").style.transform = `scale(${zoomLevel})`;
+    }
+
+    function zoomOut() {
+      zoomLevel -= 0.1;
+      if (zoomLevel < 0.5) zoomLevel = 0.5; // limit min zoom
+      document.getElementById("zoom").style.transform = `scale(${zoomLevel})`;
+    }
+
+    function resetZoom() {
+      zoomLevel = 1;
+      document.getElementById("zoom").style.transform = "scale(1)";
+    }
+  </script>
+
+<div id="dropzone">
+  <strong>⬆️ Upload or Drag & Drop a Sprite Sheet or Static Image</strong><br><br>
+  
+  📄 <b>Accepted Formats:</b> PNG, JPG, GIF (still image or sprite sheet for animations)<br>
+  • When the ascii scale is small such as 1.0 use the <b>zoom in/out</b> buttons at the top <br>
+  • Toggle Static Image Mode when using normal image files <br><br>
+
+  📐 <b>Sprite Sheet Layout:</b><br>
+  • <b>Horizontal:</b> Frames arranged left → right in a single row<br>
+  • <b>Vertical:</b> Frames stacked top ↓ bottom in a single column<br>
+  • Select the correct layout from the dropdown above<br><br>
+  
+  📏 <b>Frame Resolution:</b><br>
+  • Each frame should be <u>square</u> (width = height)<br>
+  • Recommended per-frame size: <b>50×50px to 100×100px</b> for smooth performance<br>
+  • All frames must be the same size<br><br>
+  
+  🧩 <b>Tiling:</b><br>
+  • Frames must be placed directly next to each other with as <u>small of a gap as possible</u><br>
+  • No extra padding or borders around the sheet<br><br>
+  
+  ⚙️ <b>Controls:</b><br>
+  • <b>Scale Slider</b> — Increases ASCII art resolution/detail (higher = more detail, slower performance for animations)<br>
+  • <b>FPS Slider</b> — Controls animation speed & frames generated per second<br>
+  • <b>Static Mode</b> — For single images (disables animation)<br><br>
+  
+  ⚠️ <b>Performance Notes:</b><br>
+  • Large sprite sheets are automatically scaled down to prevent lag<br>
+  • Scale for animations is capped based on resolution to maintain smooth performance<br>
+  • <b>Files over 1 MB </b>may take longer to process<br>
+  • <b>Site is not mobile friendly</b > may stutter or freeze<br><br>
+  💡 <b>Important Tips:</b><br>
+   Use <a href="https://ezgif.com/gif-to-sprite" target="_blank">ezgif</a> to convert GIFs to sprite sheets.<br>
+  Set output resolution to <b>50×50</b> or <b>100×100</b> in the converter for best results.<br> Sprite sheets will auto-animate.
+</div>
+
+<script data-cfasync="false">
+const ascii = document.getElementById("ascii");
+const fpsSlider = document.getElementById("fps");
+const fpsValue = document.getElementById("fpsValue");
+const scaleSlider = document.getElementById("scale");
+const scaleValue = document.getElementById("scaleValue");
+const scaleWarning = document.getElementById("scaleWarning");
+const grayscaleToggle = document.getElementById("grayscale");
+const staticModeToggle = document.getElementById("staticMode");
+const upload = document.getElementById("upload");
+const layout = document.getElementById("layout");
+const downloadBtn = document.getElementById("download");
+const dropzone = document.getElementById("dropzone");
+const progressContainer = document.getElementById("progressContainer");
+const progressFill = document.getElementById("progressFill");
+const progressText = document.getElementById("progressText");
+
+let rafId, frameList = [];
+let fps = +fpsSlider.value;
+let scaleFactor = +scaleSlider.value;
+let frameIndex = 0, lastTime = 0;
+let worker = null;
+let baseMaxWidth = 80;
+let baseMaxHeight = 80;
+let imgCache = null;
+
+fpsSlider.addEventListener("input", () => {
+  fps = +fpsSlider.value;
+  fpsValue.textContent = fps;
+});
+
+scaleSlider.addEventListener("input", () => {
+  scaleFactor = +scaleSlider.value;
+  scaleValue.textContent = scaleFactor.toFixed(1);
+  scaleWarning.style.display = scaleFactor > 4 ? "inline" : "none";
+  if (imgCache) handleImage(imgCache);
+});
+
+staticModeToggle.addEventListener("change", () => {
+  if (imgCache) handleImage(imgCache);
+});
+
+grayscaleToggle.addEventListener("change", () => {
+  if (imgCache) handleImage(imgCache);
+});
+
+function updateProgress(percent, text) {
+  progressContainer.style.display = "block";
+  progressFill.style.width = percent + "%";
+  progressText.textContent = text || percent + "%";
+}
+
+function hideProgress() {
+  progressContainer.style.display = "none";
+}
+
+function createWorker() {
+  const workerCode = `
+    const chars = [' ', '.', '\\'', ':', '-', '=', '+', '*', '#', '%', '@'];
+
+    function getChar(value) {
+      return chars[Math.floor(value / 255 * (chars.length - 1))];
+    }
+
+    function gammaCorrect(value, gamma = 2.2) {
+      return Math.pow(value / 255, 1 / gamma) * 255;
+    }
+
+    function adjustSaturation(r, g, b, factor) {
+      const avg = (r + g + b) / 3;
+      return [
+        Math.min(255, avg + (r - avg) * factor),
+        Math.min(255, avg + (g - avg) * factor),
+        Math.min(255, avg + (b - avg) * factor)
+      ];
+    }
+
+    self.onmessage = function(e) {
+      const { pixels, width, height, grayscale } = e.data;
+      const d = new Uint8ClampedArray(pixels);
+      let html = '', text = '';
+
+      for (let y = 0; y < height; y++) {
+        let lastColor = null;
+        let lineHtml = '<span>';
+        for (let x = 0; x < width; x++) {
+          const i = (y * width + x) * 4;
+          let r = d[i], g = d[i+1], b = d[i+2];
+
+          // Gamma
+          let rGamma = gammaCorrect(r);
+          let gGamma = gammaCorrect(g);
+          let bGamma = gammaCorrect(b);
+
+          // Brightness
+          let gray = rGamma * 0.2126 + gGamma * 0.7152 + bGamma * 0.0722;
+
+          // Saturation boost
+          [r, g, b] = adjustSaturation(r, g, b, 1.15); // Permanent boost
+
+          const char = getChar(gray);
+          const color = grayscale ? 'white' : \`rgb(\${r},\${g},\${b})\`;
+
+          if (lastColor === null) {
+            lineHtml += '<span style="color:' + color + '">';
+            lastColor = color;
+          } else if (color !== lastColor) {
+            lineHtml += '</span><span style="color:' + color + '">';
+            lastColor = color;
+          }
+
+          lineHtml += char;
+          text += char;
+        }
+        lineHtml += '</span>\\n';
+        html += lineHtml;
+        text += '\\n';
+      }
+      self.postMessage({ html, text });
+    };
+  `;
+  const blob = new Blob([workerCode], { type: "application/javascript" });
+  return new Worker(URL.createObjectURL(blob));
+}
+
+function handleImage(img) {
+  imgCache = img;
+  if (worker) worker.terminate();
+  worker = createWorker();
+  cancelAnimationFrame(rafId);
+  frameList = [];
+
+  const totalW = img.naturalWidth;
+  const totalH = img.naturalHeight;
+  const isVertical = layout.value === "vertical";
+  const isStatic = staticModeToggle.checked;
+  const frameCount = isStatic ? 1 : (isVertical ? Math.floor(totalH / totalW) : Math.floor(totalW / totalH));
+  const frameW = isVertical ? totalW : totalW / frameCount;
+  const frameH = isVertical ? totalH / frameCount : totalH;
+
+  const maxW = baseMaxWidth * scaleFactor;
+  const maxH = baseMaxHeight * scaleFactor;
+  let scale = Math.min(maxW / frameW, maxH / frameH);
+  const scaledW = Math.max(1, Math.floor(frameW * scale));
+  const scaledH = Math.max(1, Math.floor(frameH * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = scaledW;
+  canvas.height = scaledH;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+  frameIndex = 0;
+  lastTime = 0;
+
+  worker.onmessage = ({ data }) => {
+    ascii.innerHTML = data.html;
+    frameList.push(data.text);
+    hideProgress();
+  };
+
+  const loop = (ts) => {
+    rafId = requestAnimationFrame(loop);
+    if (ts - lastTime < 1000 / fps) return;
+    ctx.clearRect(0, 0, scaledW, scaledH);
+    const sx = isVertical ? 0 : frameIndex * frameW;
+    const sy = isVertical ? frameIndex * frameH : 0;
+    ctx.drawImage(img, sx, sy, frameW, frameH, 0, 0, scaledW, scaledH);
+    const imageData = ctx.getImageData(0, 0, scaledW, scaledH);
+    worker.postMessage({
+      pixels: imageData.data.buffer,
+      width: scaledW,
+      height: scaledH,
+      grayscale: grayscaleToggle.checked
+    }, [imageData.data.buffer]);
+    frameIndex = (frameIndex + 1) % frameCount;
+    lastTime = ts;
+    if (isStatic) cancelAnimationFrame(rafId);
+  };
+
+  updateProgress(100, "Processing...");
+  requestAnimationFrame(loop);
+}
+
+function processFile(file) {
+  const reader = new FileReader();
+  const img = new Image();
+  reader.onprogress = (e) => {
+    if (e.lengthComputable) {
+      const percent = Math.round((e.loaded / e.total) * 100);
+      updateProgress(percent, percent + "%");
+    }
+  };
+  reader.onloadstart = () => updateProgress(0, "Loading...");
+  reader.onloadend = () => updateProgress(100, "Processing...");
+  reader.onload = () => { img.src = reader.result; };
+  img.onload = () => handleImage(img);
+  reader.readAsDataURL(file);
+}
+
+upload.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (file) processFile(file);
+});
+dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.style.borderColor = "white"; });
+dropzone.addEventListener("dragleave", () => { dropzone.style.borderColor = "#777"; });
+dropzone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropzone.style.borderColor = "#777";
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+});
+downloadBtn.addEventListener("click", () => {
+  if (!frameList.length) { alert("No frames yet."); return; }
+  const widenFactor = 1;
+  const cleanedFrames = frameList.map(frame =>
+    frame.split("\n").map(line => line.split("").join(" ".repeat(widenFactor))).join("\n")
+  );
+  const blob = new Blob([cleanedFrames.join("\n---\n")], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "ascii-frames.txt";
+  a.click();
+});
+</script>
+
+<footer class="sticky-footer">
+  © nyeku | <a href="https://linktr.ee/HatsuneMiku" target="_blank">linktr.ee/HatsuneMiku</a>
+</footer>
+
+</body>
+</html>
