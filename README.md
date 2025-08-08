@@ -1,5 +1,7 @@
 # HTML-Ascii-Generator
 Generates ascii art and animations using images &amp; sprite sheets in a browser using HTML &amp; Javascript
+<img width="1280" height="720" alt="image" src="https://github.com/user-attachments/assets/c84784f3-6862-4acb-80d7-7744a2df36bf" />
+
 
 ## What is this for?
 This code allows for ascii art and ascii animations to be generated on the fly in the browser with decent performance, high detail, and colour accuracy.
