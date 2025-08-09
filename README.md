@@ -1,5 +1,5 @@
-# HTML-Ascii-Generator
-Generates ascii art and animations using images &amp; sprite sheets in a browser using HTML &amp; Javascript
+# Media-to-ASCII-Converter
+Generates ASCII art, animations and video from uploaded files using HTML &amp; Javascript
 <img width="1280" height="720" alt="image" src="https://github.com/user-attachments/assets/c84784f3-6862-4acb-80d7-7744a2df36bf" />
 
 
@@ -8,16 +8,16 @@ This code allows for ascii art and ascii animations to be generated on the fly i
 
 ### Variations
 There are two variations of this project:
-1. Fully fledged easy to use accurate website that generates ascii art using a static image or animations using a horizontal/vertical frame by frame spritesheet.
+1. Fully fledged easy to use accurate website that generates ascii art using an image/video file or animations using a horizontal/vertical frame by frame spritesheet.
     - <b>Demo: https://media.nyeku.xyz/ascii</b>
 
-3. Basic use version intended for embeding on any website.
+2. Basic use version intended for embeding on any website. (Video conversion comming soon)
     - <b>Demo: https://media.nyeku.xyz</b> _epilepsy warning._
 
 ## Installation:
 The Option 1 HTML file requires no setup. Just download the file and open it up. Adapting it to fit your needs is up to you.
 
-This guide will focus on Option 2
+This guide will focus on setting up Option 2
 
 - Within you html file embed this code:
   ```html
@@ -69,9 +69,8 @@ This guide will focus on Option 2
 > The ascii image quality is dependant on source image quality. To resize you can put the pre tag in a div/container.
 
 ## Option 1 Screenshots 
-<img width="3588" height="1904" alt="image" src="https://github.com/user-attachments/assets/8d26f0c7-dffc-4538-9b1e-e417af8efd2a" />
-<br>
-<img width="1573" height="921" alt="image" src="https://github.com/user-attachments/assets/067f12d6-64c5-42f2-bc04-8eaa51450ab9" />
+<img width="1778" height="954" alt="image" src="https://github.com/user-attachments/assets/7568a8e4-24c2-4d99-b2c3-611d8efe5ec5" />
+<img width="1776" height="955" alt="image" src="https://github.com/user-attachments/assets/630d9cd2-9442-4ee9-bd7f-7341a09f54be" />
 
 
       
