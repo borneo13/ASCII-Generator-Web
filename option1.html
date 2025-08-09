@@ -31,7 +31,7 @@ SOFTWARE.
 
 <head>
 <meta charset="UTF-8">
-<meta name="description" content="A multipurpose image to ascii converter & animator.">
+<meta name="description" content="A multipurpose media to ascii converter & animator.">
 <meta name="keywords" content="ASCII, Art, Image, Conversion, Animation">
 <meta name="author" content="nyeku">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -80,7 +80,8 @@ SOFTWARE.
   </center>
   
 <div id="controls" style="padding-left:7%;">
-  <input type="file" id="upload" accept="image/*">
+  <!-- accept includes video/* so file picker supports video when Video Mode is enabled -->
+  <input type="file" id="upload" accept="image/*,video/*">
   
   <label>
     FPS: <span id="fpsValue">10</span>
@@ -108,6 +109,12 @@ SOFTWARE.
     Static Image Mode:
     <input type="checkbox" id="staticMode"> <p>|</p>
   </label>
+
+  <!-- Video Mode (new) -->
+  <label>
+    Video Mode:
+    <input type="checkbox" id="videoMode"> <p>|</p>
+  </label>
   
   <label>
     Layout:
@@ -118,6 +125,8 @@ SOFTWARE.
   </label>
   
   <button id="download">Download Frames</button>
+  <!-- play/pause for video (only shown for video playback) -->
+  <button id="playPause" style="display:none;margin-left:6px;">Pause</button>
   
 </div>
 
@@ -199,6 +208,7 @@ const scaleValue = document.getElementById("scaleValue");
 const scaleWarning = document.getElementById("scaleWarning");
 const grayscaleToggle = document.getElementById("grayscale");
 const staticModeToggle = document.getElementById("staticMode");
+const videoModeToggle = document.getElementById("videoMode");
 const upload = document.getElementById("upload");
 const layout = document.getElementById("layout");
 const downloadBtn = document.getElementById("download");
@@ -206,6 +216,7 @@ const dropzone = document.getElementById("dropzone");
 const progressContainer = document.getElementById("progressContainer");
 const progressFill = document.getElementById("progressFill");
 const progressText = document.getElementById("progressText");
+const playPauseBtn = document.getElementById("playPause");
 
 let rafId, frameList = [];
 let fps = +fpsSlider.value;
@@ -215,6 +226,11 @@ let worker = null;
 let baseMaxWidth = 80;
 let baseMaxHeight = 80;
 let imgCache = null;
+let videoFileCache = null;
+let processingId = 0;
+let playLoopTimer = null;
+let playing = true;
+const MAX_VIDEO_SECONDS = 60; // default cap (user agreed earlier)
 
 fpsSlider.addEventListener("input", () => {
   fps = +fpsSlider.value;
@@ -225,16 +241,61 @@ scaleSlider.addEventListener("input", () => {
   scaleFactor = +scaleSlider.value;
   scaleValue.textContent = scaleFactor.toFixed(1);
   scaleWarning.style.display = scaleFactor > 4 ? "inline" : "none";
-  if (imgCache) handleImage(imgCache);
+  // If an image is cached, re-handle it
+  if (imgCache && !videoModeToggle.checked) handleImage(imgCache);
+  // If a video is cached and we're in Video Mode, reprocess it
+  if (videoFileCache && videoModeToggle.checked) {
+    // reprocess video at new scale
+    processVideo(videoFileCache);
+  }
 });
 
 staticModeToggle.addEventListener("change", () => {
-  if (imgCache) handleImage(imgCache);
+  if (imgCache && !videoModeToggle.checked) handleImage(imgCache);
 });
 
 grayscaleToggle.addEventListener("change", () => {
-  if (imgCache) handleImage(imgCache);
+  if (imgCache && !videoModeToggle.checked) handleImage(imgCache);
+  if (videoFileCache && videoModeToggle.checked) processVideo(videoFileCache);
 });
+
+videoModeToggle.addEventListener("change", () => {
+  // If switching modes and a file is already loaded, reprocess or warn
+  if (videoModeToggle.checked) {
+    // If user had previously loaded an image and wants to switch to videoMode, no automatic change;
+    // user must upload a video. We keep behaviour conservative.
+  } else {
+    // video mode turned off: if we had a video cached, clear it
+    videoFileCache = null;
+    playPauseBtn.style.display = "none";
+    if (frameList && frameList.length) {
+      // re-display first available ASCII frame (if any)
+      ascii.innerHTML = frameList[0] || "Upload a file to begin...";
+    }
+  }
+});
+
+playPauseBtn.addEventListener("click", () => {
+  playing = !playing;
+  playPauseBtn.textContent = playing ? "Pause" : "Play";
+  if (playing) schedulePlayLoop();
+});
+
+function schedulePlayLoop() {
+  if (playLoopTimer) { clearTimeout(playLoopTimer); playLoopTimer = null; }
+  const delay = Math.max(1, Math.round(1000 / fps));
+  playLoopTimer = setTimeout(() => {
+    // use requestAnimationFrame for smoother updates
+    requestAnimationFrame(() => {
+      if (!playing) return;
+      if (!frameList || frameList.length === 0) return;
+      // ascii.innerHTML expects HTML strings created by worker; frameList holds HTML
+      ascii.innerHTML = frameList[frameIndex] || frameList[0] || "";
+      frameIndex = (frameIndex + 1) % frameList.length;
+      schedulePlayLoop();
+    });
+  }, delay);
+}
 
 function updateProgress(percent, text) {
   progressContainer.style.display = "block";
@@ -315,6 +376,7 @@ function createWorker() {
   return new Worker(URL.createObjectURL(blob));
 }
 
+/* --- Existing image/sprite handling --- */
 function handleImage(img) {
   imgCache = img;
   if (worker) worker.terminate();
@@ -373,22 +435,240 @@ function handleImage(img) {
   requestAnimationFrame(loop);
 }
 
-function processFile(file) {
-  const reader = new FileReader();
-  const img = new Image();
-  reader.onprogress = (e) => {
-    if (e.lengthComputable) {
-      const percent = Math.round((e.loaded / e.total) * 100);
-      updateProgress(percent, percent + "%");
-    }
-  };
-  reader.onloadstart = () => updateProgress(0, "Loading...");
-  reader.onloadend = () => updateProgress(100, "Processing...");
-  reader.onload = () => { img.src = reader.result; };
-  img.onload = () => handleImage(img);
-  reader.readAsDataURL(file);
+/* -- Video handling (new) -- */
+
+function waitForEvent(target, eventName) {
+  return new Promise(resolve => {
+    const fn = () => { target.removeEventListener(eventName, fn); resolve(); };
+    target.addEventListener(eventName, fn);
+  });
 }
 
+function estimateFpsFromPlayback(video, maxSampleSeconds = 0.6) {
+  // Try to use requestVideoFrameCallback (modern browsers)
+  return new Promise(resolve => {
+    if (!video.requestVideoFrameCallback) {
+      resolve(null);
+      return;
+    }
+    let firstTime = null;
+    let lastTime = null;
+    let frames = 0;
+    function cb(now, metadata) {
+      const mt = (metadata && metadata.mediaTime) ? metadata.mediaTime : (video.currentTime || 0);
+      if (firstTime === null) firstTime = mt;
+      lastTime = mt;
+      frames++;
+      if ((lastTime - firstTime) >= maxSampleSeconds || frames >= 60) {
+        video.pause();
+        const durationSample = lastTime - firstTime;
+        if (durationSample > 0) {
+          const estimated = Math.max(1, Math.round(frames / durationSample));
+          resolve(estimated);
+        } else {
+          resolve(null);
+        }
+      } else {
+        video.requestVideoFrameCallback(cb);
+      }
+    }
+    // play briefly off-DOM muted to sample
+    const wasPaused = video.paused;
+    video.muted = true;
+    const resumeThenStart = () => {
+      video.play().then(() => {
+        video.requestVideoFrameCallback(cb);
+      }).catch(() => {
+        // can't play - fallback
+        resolve(null);
+      });
+    };
+    resumeThenStart();
+    // If something goes wrong, fallback after a timeout
+    setTimeout(() => {
+      if (frames === 0) {
+        try { video.pause(); } catch(e) {}
+        resolve(null);
+      }
+    }, 1200);
+  });
+}
+
+function postToWorkerAndWait(workerInstance, imageData, grayscaleFlag) {
+  return new Promise((resolve) => {
+    const onmsg = (e) => {
+      workerInstance.removeEventListener('message', onmsg);
+      // e.data.html is the HTML representation
+      resolve(e.data.html);
+    };
+    workerInstance.addEventListener('message', onmsg);
+    // Transfer the buffer for performance (worker receives ownership)
+    try {
+      workerInstance.postMessage({
+        pixels: imageData.data.buffer,
+        width: imageData.width,
+        height: imageData.height,
+        grayscale: grayscaleFlag
+      }, [imageData.data.buffer]);
+    } catch (err) {
+      // If transferable fails, fallback to copying
+      const copy = new Uint8ClampedArray(imageData.data);
+      workerInstance.postMessage({
+        pixels: copy.buffer,
+        width: imageData.width,
+        height: imageData.height,
+        grayscale: grayscaleFlag
+      }, [copy.buffer]);
+    }
+  });
+}
+
+async function processVideo(file) {
+  processingId++;
+  const thisProcess = processingId;
+  videoFileCache = file;
+
+  // terminate any existing worker used for images
+  if (worker) { try { worker.terminate(); } catch(e){}; worker = null; }
+
+  // create an offline video element
+  const video = document.createElement('video');
+  video.preload = 'auto';
+  video.muted = true;
+  video.playsInline = true;
+  video.crossOrigin = "anonymous";
+  video.src = URL.createObjectURL(file);
+
+  updateProgress(0, "Loading video metadata...");
+  try {
+    await waitForEvent(video, 'loadedmetadata');
+  } catch(e) {
+    hideProgress();
+    alert("Failed to load video metadata.");
+    return;
+  }
+
+  // Estimate fps (best-effort); fallback to 30
+  let detectedFps = await estimateFpsFromPlayback(video);
+  if (!detectedFps || detectedFps <= 0) detectedFps = 30;
+
+  // Cap default video FPS to a reasonable number and set fps slider to detected value
+  fps = Math.max(5, Math.min(60, detectedFps));
+  fpsSlider.value = fps;
+  fpsValue.textContent = fps;
+
+  // Determine how many seconds to process (cap to MAX_VIDEO_SECONDS)
+  const duration = video.duration || 0;
+  const secondsToProcess = Math.min(duration, MAX_VIDEO_SECONDS);
+
+  // Default video scale: keep it small to avoid OOM (do not alter image defaults)
+  const scaledW = Math.max(1, Math.floor(video.videoWidth *  (scaleFactor / 16 )));
+  const scaledH = Math.max(1, Math.floor(video.videoHeight * (scaleFactor / 16)));
+
+  // prepare canvas for capturing frames
+  const canvas = document.createElement('canvas');
+  canvas.width = scaledW;
+  canvas.height = scaledH;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  // prepare worker for video processing
+  const videoWorker = createWorker();
+  frameList = [];
+  frameIndex = 0;
+  ascii.innerHTML = ""; // clear while processing
+
+  // sequentially capture frames by seeking (stable, avoids memory spikes)
+  const totalFrames = Math.max(1, Math.floor(secondsToProcess * fps));
+  updateProgress(0, `Processing video (0 / ${totalFrames})`);
+
+  // helper to seek and draw
+  function seekTo(timeSec) {
+    return new Promise((resolve) => {
+      const onSeeked = () => {
+        video.removeEventListener('seeked', onSeeked);
+        resolve();
+      };
+      video.addEventListener('seeked', onSeeked);
+      // clamp to video.duration - tiny epsilon to avoid CORS issue in some browsers
+      video.currentTime = Math.min(timeSec, Math.max(0, video.duration - 0.001));
+    });
+  }
+
+  // process frames sequentially
+  for (let i = 0; i < totalFrames; i++) {
+    if (processingId !== thisProcess) {
+      // a newer processing run started; abort this one
+      try { videoWorker.terminate(); } catch (e) {}
+      return;
+    }
+    const t = i / fps;
+    try {
+      await seekTo(t);
+    } catch (err) {
+      // if seeking failed, continue to next
+    }
+    // draw to canvas scaled
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    try {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    } catch (err) {
+      // draw error; continue
+    }
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    // send to worker and wait for HTML response
+    try {
+      const html = await postToWorkerAndWait(videoWorker, imageData, grayscaleToggle.checked);
+      frameList.push(html);
+      // show last processed frame as a preview
+      ascii.innerHTML = html;
+    } catch (err) {
+      // worker error; stop
+      console.error("Worker error processing frame:", err);
+      break;
+    }
+
+    const percent = Math.round(((i + 1) / totalFrames) * 100);
+    updateProgress(percent, `Processing frame ${i + 1} / ${totalFrames}`);
+  }
+
+  // finished processing
+  hideProgress();
+  try { videoWorker.terminate(); } catch (e) {}
+  playPauseBtn.style.display = frameList.length ? 'inline' : 'none';
+  playPauseBtn.textContent = 'Pause';
+  playing = true;
+  frameIndex = 0;
+  // start playback loop
+  schedulePlayLoop();
+}
+
+/* -- File handling -- */
+
+function processFile(file) {
+  const isVideo = file.type && file.type.indexOf('video') === 0;
+  if (isVideo && !videoModeToggle.checked) {
+    alert("You've uploaded a video file. Please enable Video Mode before uploading videos.");
+    return;
+  }
+  if (!isVideo && videoModeToggle.checked) {
+    alert("Video Mode is enabled — please disable Video Mode to upload images/sprite sheets.");
+    return;
+  }
+  if (isVideo) {
+    // store and process
+    processVideo(file);
+  } else {
+    // normal image flow (kept exactly as existing)
+    const reader = new FileReader();
+    const img = new Image();
+    reader.onload = () => { img.src = reader.result; };
+    img.onload = () => handleImage(img);
+    reader.readAsDataURL(file);
+  }
+}
+
+/* --- UI bindings --- */
 upload.addEventListener("change", (e) => {
   const file = e.target.files[0];
   if (file) processFile(file);
@@ -401,11 +681,16 @@ dropzone.addEventListener("drop", (e) => {
   const file = e.dataTransfer.files[0];
   if (file) processFile(file);
 });
+
+/* Keep the Download Frames behavior exactly as before (text frames) */
 downloadBtn.addEventListener("click", () => {
   if (!frameList.length) { alert("No frames yet."); return; }
   const widenFactor = 1;
   const cleanedFrames = frameList.map(frame =>
-    frame.split("\n").map(line => line.split("").join(" ".repeat(widenFactor))).join("\n")
+    // strip html tags and use characters only for text output so file matches browser visualization proportionally
+    // NOTE: We keep behavior consistent with prior implementation: frames are ASCII characters, joined with spaces to match width
+    frame.replace(/<[^>]+>/g, '') // remove tags to get raw characters
+      .split("\n").map(line => line.split("").join(" ".repeat(widenFactor))).join("\n")
   );
   const blob = new Blob([cleanedFrames.join("\n---\n")], { type: "text/plain" });
   const a = document.createElement("a");
@@ -413,6 +698,7 @@ downloadBtn.addEventListener("click", () => {
   a.download = "ascii-frames.txt";
   a.click();
 });
+
 </script>
 
 <footer class="sticky-footer">
